@@ -127,7 +127,7 @@ abstract class AbstractRuleTestCase extends AbstractTestCase {
      * @param violationMaps - a list (array) of Maps, each describing a single violation.
      *      Each element in the map can contain a lineNumber, sourceLineText and messageText entries.
      */
-    protected void assertViolations(String source, Map[] violationMaps) {
+    protected void assertViolations(String source, Map[] violationMaps = parseViolations(source)) {
         def rawViolations = applyRuleTo(source)
         rawViolations.sort { v -> v.lineNumber }
         assert rawViolations.size() == violationMaps.size(), "Expected ${violationMaps.size()} violations\nFound ${rawViolations.size()}: \n    ${rawViolations.join('\n    ')}\n"
@@ -136,7 +136,31 @@ abstract class AbstractRuleTestCase extends AbstractTestCase {
             assertViolation(rawViolations[index], violationMap.lineNumber, violationMap.sourceLineText, violationMap.messageText)
         }
     }
+    
+    protected String violationMarker(String violationMessage) {
+        MARKER_START + violationMessage + MARKER_END
+    }
 
+    private static final String MARKER_START = '/* VIOLATION: '
+    private static final String MARKER_END = ' END OF VIOLATION */'
+    
+    private static Map[] parseViolations(String source) {
+        int i = 1
+        source.split('\n').collect { String line ->
+            parseLine(line, i++)
+        }.findAll { it != null } 
+    }
+
+    private static Map parseLine(String line, Integer i) {
+        def markerStartIndex = line.indexOf(MARKER_START)
+        def markerEndIndex = line.indexOf(MARKER_END)
+        markerStartIndex == -1 ? null : [
+            lineNumber: i,
+            sourceLineText: line[0 .. markerStartIndex - 1].trim(),
+            messageText: line[markerStartIndex + MARKER_START.length() .. markerEndIndex - 1]
+        ]
+    }
+    
     /**
      * Apply the current Rule to the specified source (String) and assert that it results
      * in two violations with the specified line numbers and containing the specified source text values.
@@ -239,11 +263,19 @@ actual:               $violation.sourceLine
     }
 
     private SourceCode prepareSourceCode(String source) {
-        def sourceCode = new SourceString(source, sourceCodePath, sourceCodeName)
+        def sourceWithoutMarkers = removeViolationMarkers(source)
+        def sourceCode = new SourceString(sourceWithoutMarkers, sourceCodePath, sourceCodeName)
         if (rule.requiredAstCompilerPhase != SourceCode.DEFAULT_COMPILER_PHASE) {
             sourceCode = new CustomCompilerPhaseSourceDecorator(sourceCode, rule.requiredAstCompilerPhase)
         }
         sourceCode
+    }
+
+    private static String removeViolationMarkers(String source) {
+        source.split('\n').collect { String line ->
+            def markerStartIndex = line.indexOf(MARKER_START)
+            markerStartIndex == -1 ? line : line[0 .. markerStartIndex - 1]
+        }.join('\n')
     }
 
     /**

@@ -127,7 +127,7 @@ abstract class AbstractRuleTestCase extends AbstractTestCase {
      * @param violationMaps - a list (array) of Maps, each describing a single violation.
      *      Each element in the map can contain a lineNumber, sourceLineText and messageText entries.
      */
-    protected void assertViolations(String source, Map[] violationMaps = parseViolations(source)) {
+    protected void assertViolations(String source, Map[] violationMaps) {
         def rawViolations = applyRuleTo(source)
         rawViolations.sort { v -> v.lineNumber }
         assert rawViolations.size() == violationMaps.size(), "Expected ${violationMaps.size()} violations\nFound ${rawViolations.size()}: \n    ${rawViolations.join('\n    ')}\n"
@@ -136,29 +136,27 @@ abstract class AbstractRuleTestCase extends AbstractTestCase {
             assertViolation(rawViolations[index], violationMap.lineNumber, violationMap.sourceLineText, violationMap.messageText)
         }
     }
+
+    private violationMarkerParser = new ViolationMarkerParser()
     
-    protected String violationMarker(String violationMessage) {
-        MARKER_START + violationMessage + MARKER_END
+    protected void assertInlineViolations(String source) {
+        def (Map[] expectedViolations, String sourceWithoutMarkers) = violationMarkerParser.parse(source)
+        assertViolations(sourceWithoutMarkers, expectedViolations)
     }
 
-    private static final String MARKER_START = '/* VIOLATION: '
-    private static final String MARKER_END = ' END OF VIOLATION */'
-    
-    private static Map[] parseViolations(String source) {
-        int i = 1
-        source.split('\n').collect { String line ->
-            parseLine(line, i++)
-        }.findAll { it != null } 
+    //TODO once we migrate to Groovy >= 1.8 make this a Closure<ViolationMarker>
+    protected Closure violation = this.&violationMarker
+
+    protected ViolationMarker violationMarker(String violationMessage) {
+        new ViolationMarker(violationMessage)
     }
 
-    private static Map parseLine(String line, Integer i) {
-        def markerStartIndex = line.indexOf(MARKER_START)
-        def markerEndIndex = line.indexOf(MARKER_END)
-        markerStartIndex == -1 ? null : [
-            lineNumber: i,
-            sourceLineText: line[0 .. markerStartIndex - 1].trim(),
-            messageText: line[markerStartIndex + MARKER_START.length() .. markerEndIndex - 1]
-        ]
+    protected MultipleViolationsMarker violations(Object[] violationsArguments) {
+        if (violationsArguments.every { it instanceof List}) {
+            new MultipleViolationsMarker(violationsArguments.collect(*violation))
+        } else {
+            new MultipleViolationsMarker(violationsArguments.collect(violation))
+        }
     }
     
     /**
@@ -263,21 +261,13 @@ actual:               $violation.sourceLine
     }
 
     private SourceCode prepareSourceCode(String source) {
-        def sourceWithoutMarkers = removeViolationMarkers(source)
-        def sourceCode = new SourceString(sourceWithoutMarkers, sourceCodePath, sourceCodeName)
+        def sourceCode = new SourceString(source, sourceCodePath, sourceCodeName)
         if (rule.requiredAstCompilerPhase != SourceCode.DEFAULT_COMPILER_PHASE) {
             sourceCode = new CustomCompilerPhaseSourceDecorator(sourceCode, rule.requiredAstCompilerPhase)
         }
         sourceCode
     }
-
-    private static String removeViolationMarkers(String source) {
-        source.split('\n').collect { String line ->
-            def markerStartIndex = line.indexOf(MARKER_START)
-            markerStartIndex == -1 ? line : line[0 .. markerStartIndex - 1]
-        }.join('\n')
-    }
-
+    
     /**
      * Apply the current Rule to the specified source (String) and return the resulting List of Violations.
      * @param source - the full source code to which the rule is applied, as a String

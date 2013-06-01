@@ -40,11 +40,11 @@ class UnsafeImplementationAsMapRuleTest extends AbstractRuleTestCase {
 
     @Test
     void testNoViolations() {
-        assertNoViolations('''
-        	[run: {}] as Runnable
-        ''')
+        assertNoViolations("""
+        	[run: {}] as Runnable   ${violations('foo', 'bar', 'baz')}
+        """)
     }
-
+ 
     private final sourceWithSingleViolation = """                      
         [next: {}] as Iterator              ${violation('java.util.Iterator', 'hasNext, remove')}
     """
@@ -82,7 +82,7 @@ class UnsafeImplementationAsMapRuleTest extends AbstractRuleTestCase {
     }
 
     private String violation(String implementedInterface, String missingMethods) {
-        violationMarker(
+        violation(
             "Incomplete interface implementation. The following methods of ${implementedInterface} are not implemented" +
             " by this map-to-interface coercion: [${missingMethods}]. Please note that calling any of these methods" +
             ' on this implementation will cause an UnsupportedOperationException, which is likely not intended.'

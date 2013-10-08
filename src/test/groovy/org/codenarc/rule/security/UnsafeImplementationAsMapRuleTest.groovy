@@ -44,9 +44,11 @@ class UnsafeImplementationAsMapRuleTest extends AbstractRuleTestCase {
         	[run: {}] as Runnable   ${violations('foo', 'bar', 'baz')}
         """)
     }
+    
+    def _(s) { s }   /*adas*/
  
     private final sourceWithSingleViolation = """                      
-        [next: {}] as Iterator              ${violation('java.util.Iterator', 'hasNext, remove')}
+        [next: {}] as Iterator           ${_('asdf')}   ${violation('java.util.Iterator', 'hasNext, remove')}
     """
     
     @Test
@@ -62,6 +64,9 @@ class UnsafeImplementationAsMapRuleTest extends AbstractRuleTestCase {
     
     @Test
     void testMultipleViolations() {
+        """
+            println "sdf"       #This is madness!
+        """
         assertViolations("""
             [:] as Runnable                 ${violation('java.lang.Runnable', 'run')} 
             [noSuchMethod: {}] as Iterator  ${violation('java.util.Iterator', 'hasNext, next, remove')}
